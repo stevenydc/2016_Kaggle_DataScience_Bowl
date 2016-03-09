@@ -197,7 +197,10 @@ valid_lst = write_data_csv("./validate-64x64-data.csv", validate_frames, lambda 
 
 def write_data_lmdb(fname, frames, preproc):
     # Get all data from original dicom dataset
+    print "Running write_data_lmdb."
+    print "Fetching all data and doing preprocessing..."
     dr = Parallel()(delayed(get_data)(lst,preproc) for lst in frames)
+    print "Done Fetching data, now writing database..."
     data,result = zip(*dr)
     #generate my imdb
     db_imgs = lmdb.open(fname)
@@ -230,8 +233,7 @@ def csv_to_imdb(csv_filename, lmdbname):
     return
 
 
-def creat_prototype_datasets(proto_name, train_frames, train_size, valid_size):
-    pass
+
 #generating my prototype label lmdb
 #First we need to generate our label csv
 write_label_csv("./prototype_train_label.csv",train_frames[:100], label_map)
@@ -287,7 +289,7 @@ def encode_label(label_data):
 
 #Originally encode_csv, modified to lmdb to suit Caffe
 #Check out the original encode_csv from MXnet Kaggle Data Science Bowl Github
-def encode_lmdb(label_csv, systole_lmdb, diastole_lmdb):
+def encode_label_lmdb(label_csv, systole_lmdb, diastole_lmdb):
     # Function takes in the processed label file (through write_label_csv) and encode them
     # to CDF, with systole and diastole separated. 
     # systole_encode and iastole_encode are two 2D arrays, with 10 entries, and each entry is a row of 600 entries
@@ -299,14 +301,14 @@ def encode_lmdb(label_csv, systole_lmdb, diastole_lmdb):
     encoded_label_systole_lmdb = lmdb.open(systole_lmdb, map_size =1e12)
     encoded_label_diastole_lmdb = lmdb.open(diastole_lmdb, map_size =1e12)
 
-    with db_10img_encoded_label_systole.begin(write=True) as txn_img:
+    with encoded_label_systole_lmdb.begin(write=True) as txn_img:
         for label in systole_encode:
             # print np.expand_dims(np.expand_dims(label, axis=1), axis=1).shape
             datum = caffe.io.array_to_datum(np.expand_dims(np.expand_dims(label, axis=1), axis=1))
             txn_img.put("{:0>10d}".format(systole_count),datum.SerializeToString())
             systole_count+=1
 
-    with db_10img_encoded_label_diastole.begin(write=True) as txn_img:
+    with encoded_label_diastole_lmdb.begin(write=True) as txn_img:
         for label in diastole_encode:
             # print np.expand_dims(np.expand_dims(label, axis=1), axis=1).shape
             datum = caffe.io.array_to_datum(np.expand_dims(np.expand_dims(label, axis=1), axis=1))
@@ -315,6 +317,38 @@ def encode_lmdb(label_csv, systole_lmdb, diastole_lmdb):
 
     # np.savetxt(systole_csv, systole_encode, delimiter=",", fmt="%g")
     # np.savetxt(diastole_csv, diastole_encode, delimiter=",", fmt="%g")
+
+# Modified version of encode_label_lmdb to allow passing in subset of labels, 
+# instead of the whole file
+def encode_label_lmdb_proto(encoded_label, my_lmdb):
+    encoded_label_lmdb = lmdb.open(my_lmdb, map_size =1e12)
+    label_count = 0
+    with encoded_label_lmdb.begin(write=True) as txn_img:
+        for label in encoded_label:
+            # print np.expand_dims(np.expand_dims(label, axis=1), axis=1).shape
+            datum = caffe.io.array_to_datum(np.expand_dims(np.expand_dims(label, axis=1), axis=1))
+            txn_img.put("{:0>10d}".format(systole_count),datum.SerializeToString())
+            label_count+=1
+    return 
+
+def creat_prototype_datasets(proto_name, train_frames, train_label, train_size, valid_size, preproc):
+    #Use this function if you don't have csv data already generated.
+    # In my case, this is for local CPU prototyping only.
+    write_data_lmdb(proto_name+"_train", train_frames[0:train_size], preproc)
+    write_data_lmdb(proto_name+"_validate", train_frames[train_size:(train_size+valid_size)], preproc)
+    
+    systole_encode, diastole_encode = encode_label(np.loadtxt(train_label, delimiter=","))
+    
+    encode_label_lmdb_proto(systole_encode[0:train_size], proto_name+"_systole_label_train")
+    encode_label_lmdb_proto(systole_encode[train_size:(train_size+valid_size)], proto_name+"_systole_label_validate")
+    encode_label_lmdb_proto(diastole_encode[0:train_size], proto_name+"_diastole_label_train")
+    encode_label_lmdb_proto(diastole_encode[train_size:(train_size+valid_size)], proto_name+"_diastole_label_validate")
+
+    return
+
+
+
+
 
 # Write encoded label into the target csv
 # We use CSV so that not all data need to sit into memory
