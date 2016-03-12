@@ -59,7 +59,7 @@ def FCN(images_lmdb, labels_lmdb, batch_size, include_acc=False):
     # n.score_classes, _= conv_relu(n.drop4, ks=1, nout=2, weight_std=0.01, bias_value=0.1)
     # n.upscore = L.Deconvolution(n.score_classes)
     # n.score = L.Crop(n.upscore,n.data)
-    n.loss = L.EuclideanLoss(n.fcc6, n.label, loss_param=dict(normalize=True))
+    n.loss = L.SigmoidCrossEntropyLoss(n.fcc6, n.label, loss_param=dict(normalize=True))
 
     # if include_acc:
     #     n.accuracy = L.Accuracy(n.score, n.label)
@@ -108,16 +108,52 @@ except:
 ===== Prediction! =====
 '''
 caffe.set_mode_cpu()
-net = caffe.Net('./TestCaffeNet/deploy_systole.prototxt', './TestCaffeNet/model_logs/systoleCNNtest_iter_250.caffemodel', caffe.TEST)
+net = caffe.Net('./TestCaffeNet/deploy_systole.prototxt', './TestCaffeNet/model_logs/systole_sigmoid_iter_150.caffemodel', caffe.TEST)
 img = net.blobs['data'].data
-for i in range(3):
-    plt.figure()
-    plt.imshow(img[0,4*i,...])
+# for i in range(3):
+#     plt.figure()
+#     plt.imshow(img[0,4*i,...])
 # plt.imshow(img[0,0,...])
-ret = []
-for i in range(8):
+systole_prob = []
+for i in range(50):
     net.forward()
 
-    pred = net.blobs['fcc6'].data.ravel()
+    pred = net.blobs['prob'].data.ravel()
     plt.plot(pred)
-    ret.append(pred)
+    systole_prob.append(pred)
+
+
+
+
+'''
+===== Calculate accuracy =====
+'''
+import csv
+def accumulate_result(validate_lst, prob):
+    sum_result = {}
+    cnt_result = {}
+    size = prob.shape[0]
+    fi = csv.reader(open(validate_lst))
+    for i in range(size):
+        line = fi.next() # Python2: line = fi.next()
+        idx = int(line[0])
+        if idx not in cnt_result:
+            cnt_result[idx] = 0.
+            sum_result[idx] = np.zeros((1, prob.shape[1]))
+        cnt_result[idx] += 1
+        sum_result[idx] += prob[i, :]
+    for i in cnt_result.keys():
+        sum_result[i][:] /= cnt_result[i]
+    return sum_result
+
+systole_result = accumulate_result("./Proto-1-train-label.csv", np.array(systole_prob))
+# diastole_result = accumulate_result("./Proto-1-train-label.csv", diastole_prob)
+
+Proto_valid_label_systole = np.loadtxt('Proto-1-validate-label-systole-encoded.csv', delimiter=',')
+for idx, key in enumerate(systole_result.keys()):
+    print np.sum(np.abs(Proto_valid_label_systole[idx]))
+    # print np.sum(np.abs(systole_result[key]-Proto_valid_label_systole[idx]))
+
+
+
+

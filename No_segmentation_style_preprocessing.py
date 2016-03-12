@@ -81,6 +81,7 @@ def write_label_csv(fname, frames, label_map):
             fo.write("%d,0,0\n" % index)
     print "Finished creating label csv."
     fo.close()
+    return
 
 
 
@@ -176,22 +177,6 @@ def split_csv(src_csv, split_to_train, train_csv, test_csv):
 
 
 
-# with io.capture_output() as captured:
-TRAIN_PATH      = "./Data/Competition_data/train"
-VALIDATE_PATH   = "./Data/Competition_data/validate"
-random.seed(10)
-train_frames = get_frames(TRAIN_PATH)
-random.shuffle(train_frames)
-validate_frames = get_frames(VALIDATE_PATH)
-label_map = get_label_map("./Data/Competition_data/train.csv")
-
-# Following two lines create csv file for the label, which matches the total number of slices
-# Should only be run once. 
-write_label_csv("./Data/Competition_data/train-label.csv", train_frames, label_map)
-write_label_csv("./Data/Competition_data/validate-label.csv", validate_frames, None)
-
-train_lst = write_data_csv("./train-64x64-data.csv", train_frames, lambda x: crop_resize(x, 64))
-valid_lst = write_data_csv("./validate-64x64-data.csv", validate_frames, lambda x: crop_resize(x, 64))
 
 
 
@@ -203,7 +188,7 @@ def write_data_lmdb(fname, frames, preproc):
     print "Done Fetching data, now writing database..."
     data,result = zip(*dr)
     #generate my imdb
-    db_imgs = lmdb.open(fname)
+    db_imgs = lmdb.open(fname,map_size =1e12)
     counter_img = 0
     with db_imgs.begin(write=True) as txn_img:
         for entry in data:
@@ -211,13 +196,13 @@ def write_data_lmdb(fname, frames, preproc):
             txn_img.put("{:0>10d}".format(counter_img),datum.SerializeToString())
             counter_img += 1
     print "processed {:d} images".format(counter_img)
-    lmdb.close()
+    # lmdb.close()
     return 
 
 
 def csv_to_imdb(csv_filename, lmdbname):
     # generating testing training imdb from csv file:
-    db_imgs_fromfile = lmdb.open(lmdbname)
+    db_imgs_fromfile = lmdb.open(lmdbname, map_size =1e12)
     counter_img=0
     with db_imgs_fromfile.begin(write=True) as txn_img:
         with open(csv_filename, "rb") as csvfile:
@@ -229,22 +214,22 @@ def csv_to_imdb(csv_filename, lmdbname):
                 datum = caffe.io.array_to_datum(np.array(row).reshape(30,64,64).astype(int))
                 txn_img.put("{:0>10d}".format(counter_img),datum.SerializeToString())
                 counter_img += 1
-    lmdb.close()
+    # lmdb.close()
     return
 
 
 
 #generating my prototype label lmdb
 #First we need to generate our label csv
-write_label_csv("./prototype_train_label.csv",train_frames[:100], label_map)
+# write_label_csv("./prototype_train_label.csv",train_frames[:100], label_map)
 #Now we read from fril and generate lmdb:
-db_label_fromfile = lmdb.open("")
-counter_label=0
-with db_label_fromfile.begin(write=True) as txn_img3:
-    with open("./train-label-10-img-64x64.csv", "rb") as csvfile:
-        datareader = csv.reader(csvfile)
-        for row in datareader:
-            print len(row), "\t:", row
+# db_label_fromfile = lmdb.open("")
+# counter_label=0
+# with db_label_fromfile.begin(write=True) as txn_img3:
+#     with open("./train-label-10-img-64x64.csv", "rb") as csvfile:
+#         datareader = csv.reader(csvfile)
+#         for row in datareader:
+#             print len(row), "\t:", row
 
             # temp_img = np.array(row).reshape(30,64,64).astype(int)[0,:,:]
             # plt.imshow(temp_img)
@@ -254,11 +239,11 @@ with db_label_fromfile.begin(write=True) as txn_img3:
 
 
 # Generate local train/test split, which you could use to tune your model locally.
-train_index = np.loadtxt("./train-label.csv", delimiter=",")[:,0].astype("int")
-train_set, test_set = local_split(train_index)
-split_to_train = [x in train_set for x in train_index]
-split_csv("./train-label.csv", split_to_train, "./local_train-label.csv", "./local_test-label.csv")
-split_csv("./train-64x64-data.csv", split_to_train, "./local_train-64x64-data.csv", "./local_test-64x64-data.csv")
+# train_index = np.loadtxt("./train-label.csv", delimiter=",")[:,0].astype("int")
+# train_set, test_set = local_split(train_index)
+# split_to_train = [x in train_set for x in train_index]
+# split_csv("./train-label.csv", split_to_train, "./local_train-label.csv", "./local_test-label.csv")
+# split_csv("./train-64x64-data.csv", split_to_train, "./local_train-64x64-data.csv", "./local_test-64x64-data.csv")
 
 
 
@@ -272,7 +257,7 @@ split_csv("./train-64x64-data.csv", split_to_train, "./local_train-64x64-data.cs
 '''
 Transforming label to 600 CDF, and store in csv?
 '''
-#TODO: consider directly saving to a lmdb or something
+
 def encode_label(label_data):
     """Run encoding to encode the label into the CDF target.
     """
@@ -285,6 +270,19 @@ def encode_label(label_data):
             (x < np.arange(600)) for x in diastole
         ], dtype=np.uint8)
     return systole_encode, diastole_encode
+
+
+
+
+def encode_label_csv(label_csv, systole_csv, diastole_csv):
+    systole_encode, diastole_encode = encode_label(np.loadtxt(label_csv, delimiter=","))
+    np.savetxt(systole_csv, systole_encode, delimiter=",", fmt="%g")
+    np.savetxt(diastole_csv, diastole_encode, delimiter=",", fmt="%g")
+# Generating encoded label in csv format, should only be run once,
+# This is for CPU prototyping only
+# encode_label_csv('./Data/Competition_data/train-label.csv', './Data/Competition_data/train-label-systole-encoded.csv',
+#                  './Data/Competition_data/train-label-diastole-encoded.csv')
+
 
 
 #Originally encode_csv, modified to lmdb to suit Caffe
@@ -327,42 +325,71 @@ def encode_label_lmdb_proto(encoded_label, my_lmdb):
         for label in encoded_label:
             # print np.expand_dims(np.expand_dims(label, axis=1), axis=1).shape
             datum = caffe.io.array_to_datum(np.expand_dims(np.expand_dims(label, axis=1), axis=1))
-            txn_img.put("{:0>10d}".format(systole_count),datum.SerializeToString())
+            txn_img.put("{:0>10d}".format(label_count),datum.SerializeToString())
             label_count+=1
     return 
 
-def creat_prototype_datasets(proto_name, train_frames, train_label, train_size, valid_size, preproc):
-    #Use this function if you don't have csv data already generated.
+def create_prototype_datasets(proto_name, train_frames, train_label, train_size, valid_size, preproc):
+    # Use this function if you don't have csv data already generated.
     # In my case, this is for local CPU prototyping only.
     write_data_lmdb(proto_name+"_train", train_frames[0:train_size], preproc)
+    print "Finished writing training data lmdb"
     write_data_lmdb(proto_name+"_validate", train_frames[train_size:(train_size+valid_size)], preproc)
-    
+    print "Finished writing validate data lmdb"
     systole_encode, diastole_encode = encode_label(np.loadtxt(train_label, delimiter=","))
-    
+    print "Finished encoding labels"
     encode_label_lmdb_proto(systole_encode[0:train_size], proto_name+"_systole_label_train")
     encode_label_lmdb_proto(systole_encode[train_size:(train_size+valid_size)], proto_name+"_systole_label_validate")
     encode_label_lmdb_proto(diastole_encode[0:train_size], proto_name+"_diastole_label_train")
     encode_label_lmdb_proto(diastole_encode[train_size:(train_size+valid_size)], proto_name+"_diastole_label_validate")
+    print "Finished writing all label lmdb"
+
+    np.savetxt(proto_name+'-train-label.csv', np.loadtxt(train_label, delimiter=',')[0:train_size], delimiter=",", fmt="%g")
+    print "Finished writing prototype train label"
+
+    print "Beginning writing prototype encoded labels, both train and test"
+    np.savetxt(proto_name+'-train-label-systole-encoded.csv', systole_encode[0:train_size], delimiter=",", fmt="%g")
+
+    np.savetxt(proto_name+'-train-label-diastole-encoded.csv', diastole_encode[0:train_size], delimiter=",", fmt="%g")
+
+    np.savetxt(proto_name+'-validate-label-systole-encoded.csv', systole_encode[0:train_size], delimiter=",", fmt="%g")
+    np.savetxt(proto_name+'-validate-label-diastole-encoded.csv', diastole_encode[0:train_size], delimiter=",", fmt="%g")
 
     return
 
 
 
-
-
-# Write encoded label into the target csv
-# We use CSV so that not all data need to sit into memory
-# You can also use inmemory numpy array if your machine is large enough
-encode_csv("./train-label-10-img-64x64.csv", "./train-64x64-10img-systole.csv", "./train-64x64-10img-diastole.csv")
-
 '''
-testing the encoding part of labels
+===== Actually running functions =====
 '''
-systole_encode, diastole_encode = encode_label(np.loadtxt("./train-label-10-img-64x64.csv", delimiter=","))
-print len(systole_encode[0])
 
-systole_csv = "db_10img_encoded_label_systole"
-diastole_csv= "db_10img_encoded_label_diastole"
+
+# with io.capture_output() as captured:
+TRAIN_PATH      = "./Data/Competition_data/train"
+VALIDATE_PATH   = "./Data/Competition_data/validate"
+np.random.seed(10)
+train_frames = get_frames(TRAIN_PATH)
+random.shuffle(train_frames)
+validate_frames = get_frames(VALIDATE_PATH)
+random.shuffle(validate_frames)
+label_map = get_label_map("./Data/Competition_data/train.csv")
+valid_label_map = get_label_map('./Data/Competition_data/validate.csv')
+
+# Following two lines create csv file for the label, which matches the total number of slices
+# Should only be run once.
+# write_label_csv("./Data/Competition_data/train-label.csv", train_frames, label_map)
+# write_label_csv("./Data/Competition_data/validate-label.csv", validate_frames, valid_label_map)
+
+# These two lines are for AWS use only.
+# train_lst = write_data_csv("./train-64x64-data.csv", train_frames, lambda x: crop_resize(x, 64))
+# valid_lst = write_data_csv("./validate-64x64-data.csv", validate_frames, lambda x: crop_resize(x, 64))
+
+# This line is for CPU prototyping only.
+create_prototype_datasets('Proto-1', train_frames, './Data/Competition_data/train-label.csv', 200, 50, lambda x:crop_resize(x, 64))
+
+
+
+
 
 
 
