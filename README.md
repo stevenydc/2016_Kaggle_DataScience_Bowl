@@ -13,4 +13,8 @@ We calculate the Systole volume using the time point with the smallest area in e
 ## Second approach:
 Using Kaggle's training dataset, we feed in each slice's 30 time points together at a time. 
 We encode the label data to be a vector of length 600, representing the CDF format that the final submission need to be in.
+Basic model structure:
+Standard Conv/relu/pooling layers + sigmoid activation and CrossEntropy loss. Prediction data is pulled out of the sigmoid activation layer.
 
+
+Caffe's Prototxt files are included.

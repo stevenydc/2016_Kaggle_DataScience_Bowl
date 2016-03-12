@@ -90,69 +90,11 @@ def make_nets():
 
 
 
-# caffe.set_mode_cpu()
-
-os.chdir('./TestCaffeNet')
-try:
-    solver = caffe.SGDSolver('./solver_systole.prototxt')
-except:
-    print "oh well."
 
 #Run this command in shell:
 '''
 /Users/stevenydc/Documents/Caffe\ Installation/caffe_FCN/build/tools/caffe train -solver=solver_systole.prototxt > systole_test.log
 '''
-
-
-'''
-===== Prediction! =====
-'''
-caffe.set_mode_cpu()
-net = caffe.Net('./TestCaffeNet/deploy_systole.prototxt', './TestCaffeNet/model_logs/systole_sigmoid_iter_150.caffemodel', caffe.TEST)
-img = net.blobs['data'].data
-# for i in range(3):
-#     plt.figure()
-#     plt.imshow(img[0,4*i,...])
-# plt.imshow(img[0,0,...])
-systole_prob = []
-for i in range(50):
-    net.forward()
-
-    pred = net.blobs['prob'].data.ravel()
-    plt.plot(pred)
-    systole_prob.append(pred)
-
-
-
-
-'''
-===== Calculate accuracy =====
-'''
-import csv
-def accumulate_result(validate_lst, prob):
-    sum_result = {}
-    cnt_result = {}
-    size = prob.shape[0]
-    fi = csv.reader(open(validate_lst))
-    for i in range(size):
-        line = fi.next() # Python2: line = fi.next()
-        idx = int(line[0])
-        if idx not in cnt_result:
-            cnt_result[idx] = 0.
-            sum_result[idx] = np.zeros((1, prob.shape[1]))
-        cnt_result[idx] += 1
-        sum_result[idx] += prob[i, :]
-    for i in cnt_result.keys():
-        sum_result[i][:] /= cnt_result[i]
-    return sum_result
-
-systole_result = accumulate_result("./Proto-1-train-label.csv", np.array(systole_prob))
-# diastole_result = accumulate_result("./Proto-1-train-label.csv", diastole_prob)
-
-Proto_valid_label_systole = np.loadtxt('Proto-1-validate-label-systole-encoded.csv', delimiter=',')
-for idx, key in enumerate(systole_result.keys()):
-    print np.sum(np.abs(Proto_valid_label_systole[idx]))
-    # print np.sum(np.abs(systole_result[key]-Proto_valid_label_systole[idx]))
 
 
 

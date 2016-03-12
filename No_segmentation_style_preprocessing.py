@@ -385,7 +385,75 @@ valid_label_map = get_label_map('./Data/Competition_data/validate.csv')
 # valid_lst = write_data_csv("./validate-64x64-data.csv", validate_frames, lambda x: crop_resize(x, 64))
 
 # This line is for CPU prototyping only.
-create_prototype_datasets('Proto-1', train_frames, './Data/Competition_data/train-label.csv', 200, 50, lambda x:crop_resize(x, 64))
+# create_prototype_datasets('Proto-1', train_frames, './Data/Competition_data/train-label.csv', 200, 50, lambda x:crop_resize(x, 64))
+
+
+
+
+'''
+===== To be run on EC2 =====
+'''
+TRAIN_PATH      = "./Data/train"
+VALIDATE_PATH   = "./Data/validate"
+TEST_PATH       = "./Data/test"
+np.random.seed(10)
+train_frames = get_frames(TRAIN_PATH)
+random.shuffle(train_frames)
+validate_frames = get_frames(VALIDATE_PATH)
+random.shuffle(validate_frames)
+test_frames = get_frames(TEST_PATH)
+
+label_map = get_label_map("./Data/train.csv")
+valid_label_map = get_label_map('./Data/validate.csv')
+#TODO: make combined training file!
+# combined_train_label_map = np.vstack([label_map])
+
+Trial_name = 'FirstFullModel'
+
+write_label_csv('./Data/{0}-train-label.csv'.format(Trial_name), train_frames, label_map)
+write_label_csv('./Data/{0}-valid-label.csv'.format(Trial_name), validate_frames, valid_label_map)
+write_label_csv('./Data/{0}-test-label.csv'.format(Trial_name),  test_frames, None)
+
+
+write_data_lmdb(Trial_name+"_train", train_frames, lambda x: crop_resize(x, 64))
+print "Finished writing training data lmdb"
+write_data_lmdb(Trial_name+"_validate", validate_frames, lambda x: crop_resize(x, 64))
+print "Finished writing validate data lmdb"
+write_data_lmdb(Trial_name+"_test", test_frames, lambda x: crop_resize(x, 64))
+print "Finished writing test data lmdb"
+
+
+
+
+encode_label_lmdb('./Data/train-label.csv', Trial_name+"_systole_label_train", Trial_name+"_diastole_label_train")
+encode_label_lmdb('./Data/validate-label.csv', Trial_name+"_systole_label_validate", Trial_name+"_diastole_label_validate")
+encode_label_lmdb('./Data/test-label.csv', Trial_name+"_systole_label_test", Trial_name+"_diastole_label_test")
+
+
+systole_encode_train, diastole_encode_train = encode_label(np.loadtxt('./Data/train-label.csv', delimiter=","))
+systole_encode_validate, diastole_encode_validate = encode_label(np.loadtxt('./Data/validate-label.csv', delimiter=","))
+# systole_encode_test, diastole_encode_test = encode_label(np.loadtxt('../test-label.csv', delimiter=","))
+# print "Finished encoding labels"
+np.savetxt(proto_name+'-train-label-diastole-encoded.csv', diastole_encode_train, delimiter=",", fmt="%g")
+np.savetxt(proto_name+'-train-label-sysstole-encoded.csv', sysstole_encode_train, delimiter=",", fmt="%g")
+np.savetxt(proto_name+'-validate-label-diastole-encoded.csv', diastole_encode_validate, delimiter=",", fmt="%g")
+np.savetxt(proto_name+'-validate-label-sysstole-encoded.csv', sysstole_encode_validate, delimiter=",", fmt="%g")
+
+
+# print "Writing encoded labels to lmdb"
+# encode_label_lmdb_proto(systole_encode_train, Trial_name+"_systole_label_train")
+# encode_label_lmdb_proto(diastole_encode_train, Trial_name+"_diastole_label_train")
+
+# encode_label_lmdb_proto(systole_encode_validate, Trial_name+"_systole_label_validate")
+# encode_label_lmdb_proto(diastole_encode_validate, Trial_name+"_diastole_label_validate")
+
+# encode_label_lmdb_proto(systole_encode_test, Trial_name+"_systole_label_test")
+# encode_label_lmdb_proto(diastole_encode_test, Trial_name+"_diastole_label_test")
+# print "Finished writing all label lmdb"
+
+
+
+
 
 
 
